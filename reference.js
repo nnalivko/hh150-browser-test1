@@ -131,3 +131,9 @@ exampleStudy=function(){
  if(!TRAINING_CONTEXT[x?.text.match(/AI_FIRST50_\d+/)?.[0]])return exampleStudyBeforeRestoredContext();
  return '<h1>Посмотрим на примерах</h1><p class="muted">Пример '+(i+1)+' из '+xs.length+'. Это обучение: решение и объяснение уже показаны.</p><div class="progress"><span style="width:'+100*(i+1)/xs.length+'%"></span></div><div class="card reader">'+trainingExampleWithContext(x.text)+'</div><div class="footer-actions"><button onclick="exampleBack()">Назад</button><button class="primary" onclick="exampleNext()">'+(i+1===xs.length?'Теперь попробовать самостоятельно':'Следующий пример')+'</button></div><button class="quiet small" onclick="showDoc(\'training\')">Все утверждённые примеры целиком</button>';
 };
+const showDocBeforeRestoredContext=showDoc;
+showDoc=function(id){
+ if(id!=='training')return showDocBeforeRestoredContext(id);
+ const d=documentById('training');
+ showModal(d.title,'<div class="reader">'+d.text.split(/(?=^### )/m).map(trainingExampleWithContext).join('')+'</div>');
+};
