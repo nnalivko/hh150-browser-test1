@@ -1,0 +1,20 @@
+.reference-panel[hidden]{display:none!important}
+.reference-panel{position:fixed;right:0;top:76px;bottom:0;width:min(620px,48vw);background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 30px #172c4818;z-index:7;display:flex;flex-direction:column;padding:20px 24px;overflow:hidden}
+.reference-heading{display:flex;justify-content:space-between;align-items:center;gap:16px}
+.reference-heading h2{margin:0;font-size:22px}
+.reference-panel label{margin:5px 0}
+.reference-scroll{flex:1;min-height:0;overflow:auto;padding:8px 12px 16px 0;margin-top:12px;overscroll-behavior:contain}
+.reference-footer{padding-top:12px;border-top:1px solid var(--line);font-size:14px}
+.reference-footer a{color:var(--blue)}
+.reference-example{border-top:1px solid var(--line);padding-top:10px}
+.reference-boundary{background:var(--soft);padding:14px;border-radius:8px}
+.reference-examples>summary{font-weight:600}
+.reference-context{margin:0 0 14px}
+.reference-open .layout{margin-right:min(620px,48vw)}
+.reference-open .layout .main{padding:24px}
+.reference-open .layout .cols{grid-template-columns:1fr}
+.reference-only .layout{display:none}
+.reference-only .reference-panel{position:static;width:min(1050px,100%);height:calc(100vh - 150px);margin:auto;border:0;box-shadow:none}
+.reference-only .header .brand small{display:none}
+@media(max-width:1100px){.reference-open .layout{margin-right:0}.reference-panel{width:min(620px,90vw)}.header{height:auto;min-height:76px;flex-wrap:wrap;gap:8px}.headright{flex-wrap:wrap}.headright .reference-launch{display:inline-flex!important}.reference-panel{top:105px}}
+@media(max-width:600px){.reference-panel{top:0;width:100vw;z-index:10;padding:16px}.reference-only .reference-panel{height:calc(100vh - 170px)}.reference-only .header .brand{font-size:16px}}
