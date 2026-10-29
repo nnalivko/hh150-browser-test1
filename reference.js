@@ -1,5 +1,6 @@
 'use strict';
 // Reference text is selected only by document headings. No case is interpreted here.
+let TRAINING_CONTEXT={};
 let referenceChoice='codebook',referenceFocus=null,referenceStandalone=false;
 function referenceChunk(cat){
  const text=documentById('codebook').text;
@@ -28,7 +29,7 @@ function referenceBody(choice){
    '<button class="small" onclick="selectReference(\'codebook\')">Весь кодбук и P1–P4</button></p>'+
    '<details class="reference-examples"><summary>Разобранные учебные примеры '+choice+' ('+examples.length+')</summary>'+
    '<p class="tiny muted">Только ранее утверждённые учебные материалы. Это не подсказки к текущему заданию и не ключ самопроверки.</p>'+
-   examples.map(x=>'<article class="reader reference-example">'+md(x)+'</article>').join('')+'</details>';
+   examples.map(x=>'<article class="reader reference-example">'+trainingExampleWithContext(x)+'</article>').join('')+'</details>';
  }
  const d=documentById(choice==='guide'?'guide':'codebook');
  return '<div class="reader" id="referenceRule">'+md(d.text)+'</div>';
@@ -113,3 +114,20 @@ function refreshExerciseHelpStatus(){
 }
 document.addEventListener('input',refreshExerciseHelpStatus);
 document.addEventListener('change',refreshExerciseHelpStatus);
+
+function trainingExampleWithContext(text){
+ const id=text.match(/AI_FIRST50_\d+/)?.[0],c=TRAINING_CONTEXT[id];
+ if(!c)return md(text);
+ return '<div class="notice">Показан восстановленный исторический контекст того же учебного примера. Утверждённая оценка относится только к '+esc(c.category)+'='+esc(c.approved_code)+'.</div>'+
+  '<p><b>Заголовок:</b> '+esc(c.title)+'</p><div class="eyebrow">Полный текущий абзац</div><div class="current training-restored-current" data-record="'+id+'">'+esc(c.current)+'</div>'+
+  '<details class="training-restored-context" open><summary>Соседние абзацы — разрешённый контекст</summary><b>Предыдущий абзац</b><div class="context training-restored-previous">'+esc(c.previous||'[отсутствует]')+'</div><b>Следующий абзац</b><div class="context training-restored-next">'+esc(c.next||'[отсутствует]')+'</div></details>'+
+  '<div class="notice"><b>Рассматриваемый фрагмент и зафиксированное объяснение</b><div class="reader">'+md(text)+'</div></div>'+
+  '<p class="tiny muted">Сначала прочитайте весь текущий абзац. Соседний контекст помогает установить говорящего и смысл, но не заменяет признак в текущем абзаце. Другие пять оценок эта карточка не задаёт.</p>'+
+  '<details><summary>Данные исторического источника</summary><p class="path">Дата: '+esc(c.published_at)+'<br>Авторы: '+esc(c.authors.join(', ')||'[не указаны]')+'<br>Статья: '+esc(c.article_id)+'<br>Исходный идентификатор абзаца: '+esc(c.paragraph_id)+'<br>SHA-256 текущего текста: '+esc(c.current_sha256)+'</p><p>'+esc(c.source_note)+'</p></details>';
+}
+const exampleStudyBeforeRestoredContext=exampleStudy;
+exampleStudy=function(){
+ const xs=M.trainingCards||[],i=Math.min(S.training.exampleIndex||0,xs.length-1),x=xs[i];
+ if(!TRAINING_CONTEXT[x?.text.match(/AI_FIRST50_\d+/)?.[0]])return exampleStudyBeforeRestoredContext();
+ return '<h1>Посмотрим на примерах</h1><p class="muted">Пример '+(i+1)+' из '+xs.length+'. Это обучение: решение и объяснение уже показаны.</p><div class="progress"><span style="width:'+100*(i+1)/xs.length+'%"></span></div><div class="card reader">'+trainingExampleWithContext(x.text)+'</div><div class="footer-actions"><button onclick="exampleBack()">Назад</button><button class="primary" onclick="exampleNext()">'+(i+1===xs.length?'Теперь попробовать самостоятельно':'Следующий пример')+'</button></div><button class="quiet small" onclick="showDoc(\'training\')">Все утверждённые примеры целиком</button>';
+};
