@@ -82,3 +82,34 @@ render=function(){
 };
 help=function(){showModal('Как пользоваться программой','<p>Правила доступны по кнопке «Кодбук и справка» вверху и рядом с текущей категорией. Справка открывается рядом с ответами; ввод и текущий шаг сохраняются.</p><p>Для отдельного окна выберите в справке ссылку «только для чтения». Две рабочие вкладки по-прежнему защищены от одновременной записи.</p><p>Для 1 нужны дословная цитата из текущего абзаца и отдельные говорящий/подача для категории; для ? — конкретная причина. Скачивайте резервную копию перед закрытием и каждые 20–30 минут.</p><button onclick="$(\'modal\').close();openReference()">Кодбук и справка</button>')};
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('referencePanel').hidden&&!referenceStandalone){e.preventDefault();closeReference()}});
+
+function exerciseInstructions(x){
+ const a=exerciseEntry(x.number),cat=referenceCurrentCategory();
+ let steps;
+ if(x.number==='8')steps='<li>Прочитайте вопрос и все предложенные варианты.</li><li>Выберите один вариант кнопкой. Здесь не нужно выделять цитату или заполнять говорящего.</li><li>При необходимости откройте кодбук. Нажмите «Сохранить и дальше» после своего решения.</li>';
+ else if(x.number==='9')steps='<li>Для каждого короткого вопроса отдельно выберите «Да» или «Нет».</li><li>Проверьте, что отмечены все вопросы. Здесь не нужны цитаты и атрибуция.</li><li>После своих ответов нажмите «Сохранить и дальше».</li>';
+ else steps='<li>Прочитайте текущий абзац. При необходимости раскройте предоставленный соседний контекст.</li><li>Оценивайте только указанную в этом упражнении категорию. Выберите «Да» (1), «Нет» (0) или «Пока не могу решить» (?).</li><li>При 1 выделите непрерывную цитату именно в текущем абзаце и нажмите «Взять выделенные слова». Затем укажите говорящего и подачу для этой категории.</li><li>При 0 цитата не обязательна. При ? выберите конкретную причину; для «Другой конкретной причины» заполните уточнение. Говорящего и подачу указывайте там, где можете установить.</li><li>Поле «Ваши наблюдения» необязательно. Нажмите «Сохранить и дальше». Если не хватает обязательного поля, программа укажет его.</li>';
+ const error=exerciseValid(x);
+ const status=error?'Что ещё заполнить: '+error:'Обязательные поля заполнены. Это проверка полноты записи, а не правильности ответа.';
+ return '<section class="card training-instructions" aria-label="Как выполнить это задание"><h2>Как выполнить это задание</h2><ol>'+steps+'</ol>'+
+ '<p>Точное правило можно открыть здесь — вторую рабочую вкладку создавать не нужно.</p>'+
+ (cat?'<details class="training-rule"><summary>'+esc(cat)+' — определение и границы из кодбука</summary><div class="reader">'+md(referenceChunk(cat))+'</div></details>':'')+
+ '<button class="small" onclick="openReference('+ (cat?"'"+cat+"'":'') +')">Открыть кодбук и справку</button>'+
+ '<p class="notice" id="exerciseHelpStatus" role="status">'+esc(status)+'</p><p class="tiny muted">Сначала сохраните собственные учебные ответы. Отдельный ключ получите у исследователя после выполнения упражнений; программа не показывает правильный вариант.</p></section>';
+}
+const renderBeforeTrainingInstructions=render;
+render=function(){
+ renderBeforeTrainingInstructions();
+ if(S.page==='exercise'){
+  const x=exercises()[Math.min(ui.exercise,exercises().length-1)];
+  const holder=document.createElement('div');holder.innerHTML=exerciseInstructions(x);
+  const card=$('main').querySelector('.card');$('main').insertBefore(holder.firstElementChild,card);
+ }
+};
+function refreshExerciseHelpStatus(){
+ const el=$('exerciseHelpStatus');if(!el||!S||S.page!=='exercise')return;
+ const x=exercises()[Math.min(ui.exercise,exercises().length-1)],error=exerciseValid(x);
+ el.textContent=error?'Что ещё заполнить: '+error:'Обязательные поля заполнены. Это проверка полноты записи, а не правильности ответа.';
+}
+document.addEventListener('input',refreshExerciseHelpStatus);
+document.addEventListener('change',refreshExerciseHelpStatus);
