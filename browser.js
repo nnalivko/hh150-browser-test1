@@ -1,5 +1,5 @@
 'use strict';
-const BROWSER_VERSION='3.0-browser-test4',INSTRUMENT='HUMAN-CB-1.3-FROZEN54-RU-20261026';
+const BROWSER_VERSION='3.0-local-autosave1',INSTRUMENT='HUMAN-CB-1.3-FROZEN54-RU-20261026';
 const MATERIALS_SHA='00e96cd9e310fb43e05ff067971fceae7c05ef9f0a86cce1d1921b00b5ff3581';
 const STORE_KEY='ria-browser-test1:'+location.pathname.replace(/index\.html$/,'');
 let db,releaseLock,storageWarning='',lastBackupAt=0,packetValidated='',booted=false;
@@ -52,10 +52,10 @@ async function commit(n,expected){
  })
 }
 function journal(){try{localStorage.setItem(STORE_KEY+':pending',JSON.stringify({baseRevision:S.revision,state:S}));storageWarning=''}catch(e){storageWarning='Журнал не записан: дождитесь автосохранения и скачайте копию.'}}
-function savedLabel(){if(!$('saveState'))return;let el=$('saveState');if(saveError){el.textContent='Не сохранено — скачайте копию';el.className='save error';el.title=saveError}else if(saved<wanted||writing){el.textContent='Сохраняем…';el.className='save dirty'}else{el.textContent='Все изменения сохранены';el.className='save';el.title='IndexedDB этого браузера'}if($('backupReminder'))$('backupReminder').textContent=storageWarning||(Date.now()-lastBackupAt>20*60*1000?' Сделайте отдельную резервную копию.':'')}
-function change(){if(!booted||S.locked)return;wanted++;saveError='';journal();savedLabel();void pump()}
+function savedLabel(){if(!$('saveState'))return;let el=$('saveState');if(saveError){el.textContent='Не сохранено — скачайте копию';el.className='save error';el.title=saveError}else if(saved<wanted||writing){el.textContent='Сохраняем…';el.className='save dirty'}else{el.textContent='Все изменения сохранены';el.className='save';el.title='Локально в этом браузере'+(S.savedUtc?' · '+S.savedUtc:'')}if($('backupReminder'))$('backupReminder').textContent=storageWarning||(Date.now()-lastBackupAt>20*60*1000?' Сделайте отдельную резервную копию.':'')}
+function change(){if(!booted||S.locked)return;wanted++;saveError='';journal();savedLabel();clearTimeout(saveTimer);saveTimer=setTimeout(()=>{saveTimer=null;void pump()},800)}
 async function pump(){if(writing)return;writing=true;try{while(saved<wanted){let n=wanted,payload=copy(S),x=await commit(payload,S.revision);S.revision=x.revision;S.savedUtc=x.savedUtc;saved=n;if(saved<wanted)journal();else localStorage.removeItem(STORE_KEY+':pending')}saveError=''}catch(e){saveError=e.message}finally{writing=false;savedLabel()}}
-async function flush(){while(writing)await new Promise(r=>setTimeout(r,10));await pump();assert(saved===wanted,saveError||'Изменения не сохранены.')}
+async function flush(){clearTimeout(saveTimer);saveTimer=null;while(writing)await new Promise(r=>setTimeout(r,10));await pump();assert(saved===wanted,saveError||'Изменения не сохранены.')}
 async function recoverJournal(){let raw=localStorage.getItem(STORE_KEY+':pending');if(!raw)return;let j;try{j=JSON.parse(raw);await validateState(j.state);assert(j.baseRevision===j.state.revision,'Повреждён журнал.')}catch(e){throw Error('Журнал требует восстановления из резервной копии: '+e.message)}
  if(S.locked){localStorage.removeItem(STORE_KEY+':pending');return}
  if(j.baseRevision===S.revision){let x=await commit(copy(j.state),S.revision);S=j.state;S.revision=x.revision;S.savedUtc=x.savedUtc;localStorage.removeItem(STORE_KEY+':pending')}
@@ -64,7 +64,7 @@ async function recoverJournal(){let raw=localStorage.getItem(STORE_KEY+':pending
 function download(name,data,type='application/octet-stream'){let a=document.createElement('a'),url=URL.createObjectURL(new Blob([data],{type}));a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}
 async function makeBackup(s){let payload_json=JSON.stringify(s);return {schema:'ria-browser-backup-1',application_version:BROWSER_VERSION,instrument_version:INSTRUMENT,created_utc:utc(),payload_json,sha256:await digest(payload_json)}}
 async function backup(){try{try{await flush()}catch{}let b=await makeBackup(S);download('RIA_BROWSER_BACKUP_'+Date.now()+'.json',JSON.stringify(b,null,2),'application/json');lastBackupAt=Date.now();localStorage.setItem(STORE_KEY+':lastBackup',String(lastBackupAt));savedLabel()}catch(e){alertError(e)}}
-async function restoreBackup(b){assert(object(b)&&b.schema==='ria-browser-backup-1'&&b.instrument_version===INSTRUMENT&&[BROWSER_VERSION,'3.0-browser-test1','3.0-browser-test2','3.0-browser-test3'].includes(b.application_version)&&typeof b.payload_json==='string','Нужна резервная копия этой браузерной версии.');assert(await digest(b.payload_json)===b.sha256,'Резервная копия повреждена: SHA-256 не совпадает.');let n=JSON.parse(b.payload_json);await validateState(n);await flush();assert(!S.locked&&!S.packet&&!Object.keys(S.responses).length,'В профиле уже есть работа. Восстанавливайте в пустом профиле браузера, не поверх ответов.');n.revision=S.revision;let x=await commit(copy(n),S.revision);S=n;S.revision=x.revision;S.savedUtc=x.savedUtc;wanted=saved=0;localStorage.removeItem(STORE_KEY+':pending');render()}
+async function restoreBackup(b){assert(object(b)&&b.schema==='ria-browser-backup-1'&&b.instrument_version===INSTRUMENT&&[BROWSER_VERSION,'3.0-browser-test4','3.0-browser-test1','3.0-browser-test2','3.0-browser-test3'].includes(b.application_version)&&typeof b.payload_json==='string','Нужна резервная копия этой браузерной версии.');assert(await digest(b.payload_json)===b.sha256,'Резервная копия повреждена: SHA-256 не совпадает.');let n=JSON.parse(b.payload_json);await validateState(n);await flush();assert(!S.locked&&!S.packet&&!Object.keys(S.responses).length,'В профиле уже есть работа. Восстанавливайте в пустом профиле браузера, не поверх ответов.');n.revision=S.revision;let x=await commit(copy(n),S.revision);S=n;S.revision=x.revision;S.savedUtc=x.savedUtc;wanted=saved=0;localStorage.removeItem(STORE_KEY+':pending');render()}
 function csvRow(a){return a.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')+'\r\n'}
 async function buildExport(s){
  let result={schema:'ria-coder-results-1',instrument_version:INSTRUMENT,instrument_sha256:M.instrument_sha256,application_version:BROWSER_VERSION,coder_id:s.coderId,status:s.locked?'FINAL_LOCKED':'DRAFT',exported_utc:utc(),packet:s.packet,responses:s.responses,revision:s.revision,locked_utc:s.lockedUtc||null};
@@ -86,11 +86,13 @@ async function browserInit(){
  const contextResponse=await fetch('training-context.json',{cache:'no-cache'});assert(contextResponse.ok,'Не удалось загрузить контекст учебных примеров.');const contextBytes=await contextResponse.arrayBuffer();assert(await digest(contextBytes)==='2f3afb111771a42d1502780fc57aab29327e29c0c3ee07ea85fa30dcff5a5f12','Изменён проверенный контекст учебных примеров.');TRAINING_CONTEXT=JSON.parse(new TextDecoder().decode(contextBytes)).examples;
  if(location.hash==='#codebook'){await startReferenceOnly();await registerOfflineCopy();return}
  await new Promise((resolve,reject)=>{navigator.locks.request(STORE_KEY,{ifAvailable:true},async lock=>{if(!lock){reject(Error('Эта работа уже открыта в другой вкладке. Закройте её и обновите страницу.'));return}resolve();await new Promise(r=>releaseLock=r)}).catch(reject)});
- db=await openDB();S=await readDB()||emptyState();await validateState(S);await recoverJournal();dataPath='Локальное хранилище браузера (IndexedDB), '+location.origin;lastBackupAt=Number(localStorage.getItem(STORE_KEY+':lastBackup')||0);booted=true;render();setInterval(savedLabel,60000);
+ db=await openDB();S=await readDB()||emptyState();await validateState(S);await recoverJournal();dataPath='Локальное хранилище браузера (IndexedDB), '+location.origin;lastBackupAt=Number(localStorage.getItem(STORE_KEY+':lastBackup')||0);booted=true;render();setInterval(savedLabel,60000);setInterval(()=>{if(booted&&!S.locked&&saved<wanted)void pump()},5000);
  await registerOfflineCopy();
 }
 async function registerOfflineCopy(){
  try{await navigator.serviceWorker.register('sw.js',{scope:'./'});await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)await new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}));$('offlineStatus').textContent='Офлайн-копия приложения готова.'}catch(e){$('offlineStatus').textContent='Офлайн-копия НЕ готова. Не отключайте интернет: '+e.message}
 }
+
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&booted&&!S.locked&&saved<wanted){clearTimeout(saveTimer);saveTimer=null;void pump()}});
 
 init().catch(e=>{$('fatal').textContent=e.message;$('fatal').style.display='block';$('main').innerHTML='';$('offlineStatus').textContent='Работа не начата.';appendReadOnlyLink($('fatal'))});
