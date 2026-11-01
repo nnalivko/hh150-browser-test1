@@ -1,23 +1,26 @@
 'use strict';
-const BROWSER_VERSION='3.0-local-autosave1',INSTRUMENT='HUMAN-CB-1.3-FROZEN54-RU-20261026';
+const BROWSER_VERSION='3.0-local-profiles1',INSTRUMENT='HUMAN-CB-1.3-FROZEN54-RU-20261026';
 const MATERIALS_SHA='00e96cd9e310fb43e05ff067971fceae7c05ef9f0a86cce1d1921b00b5ff3581';
-const STORE_KEY='ria-browser-test1:'+location.pathname.replace(/index\.html$/,'');
+const PROFILE=new URLSearchParams(location.search).get('coder');
+const PROFILE_ID=['1','2'].includes(PROFILE)?'coder_'+PROFILE:'';
+const APPROVED_PACKET_SHA='786c7530ec7d3f1c7346cfdde65a37cd7d5d39e879f669446a2527b58f6c9368';
+const STORE_KEY='ria-browser-test1:'+location.pathname.replace(/index\.html$/,'')+(PROFILE_ID?':'+PROFILE_ID:'');
 let db,releaseLock,storageWarning='',lastBackupAt=0,packetValidated='',booted=false;
 const copy=x=>JSON.parse(JSON.stringify(x)),utf8=s=>new TextEncoder().encode(s),utc=()=>new Date().toISOString();
 async function digest(x){let b=typeof x==='string'?utf8(x):x;return [...new Uint8Array(await crypto.subtle.digest('SHA-256',b))].map(x=>x.toString(16).padStart(2,'0')).join('')}
 function assert(v,message){if(!v)throw Error(message)}
 function object(x){return x!==null&&typeof x==='object'&&!Array.isArray(x)}
-function emptyState(){return {schema:'ria-coder-session-1',instrument_version:INSTRUMENT,revision:0,coderId:'',page:'home',training:{completed:false,keyAcknowledged:false,accepted:false,answers:{}},packet:null,responses:{},work:{caseIndex:0,catIndex:0},demo:{caseIndex:0,catIndex:0,responses:{}},locked:false,drafts:{}}}
+function emptyState(){return {schema:'ria-coder-session-1',instrument_version:INSTRUMENT,revision:0,coderId:PROFILE_ID,page:'home',training:{completed:false,keyAcknowledged:false,accepted:false,answers:{}},packet:null,responses:{},work:{caseIndex:0,catIndex:0},demo:{caseIndex:0,catIndex:0,responses:{}},locked:false,drafts:{}}}
 async function validatePacket(p){
  assert(object(p),'Нужен JSON-объект задания.');const fields=['schema','instrument_version','packet_id','title','authorized_for_independent_coding','researcher_release_reference','cases'];
  assert(Object.keys(p).every(k=>fields.includes(k)),'В задании есть посторонние поля.');
  assert(p.schema==='ria-independent-packet-1'&&p.instrument_version===INSTRUMENT&&typeof p.packet_id==='string'&&p.packet_id.trim(),'Неподходящая схема/версия задания.');
  assert(p.authorized_for_independent_coding===true&&typeof p.researcher_release_reference==='string'&&p.researcher_release_reference.trim(),'HOLD: отсутствует явный допуск задания.');
- assert(Array.isArray(p.cases)&&p.cases.length===150,'Нужно ровно 150 случаев.');let seen=[new Set(),new Set(),new Set()];
+ assert(Array.isArray(p.cases)&&p.cases.length===150,'Нужно ровно 150 случаев.');const empirical=await digest(JSON.stringify(p))===APPROVED_PACKET_SHA;let seen=[new Set(),new Set(),new Set()];
  for(const c of p.cases){assert(object(c),'Неверный случай.');assert(Object.keys(c).every(k=>['case_id','article_id','paragraph_id','paragraph_sha256','title','current','previous','next','metadata','source_version'].includes(k)),'Посторонние поля случая.');assert(Object.values(c).every(v=>v===null||typeof v==='string'),'Поля случая должны быть строками.');
   ['case_id','article_id','paragraph_id'].forEach((k,i)=>{assert(c[k]&&!seen[i].has(c[k]),'Отсутствующий или повторный ID.');seen[i].add(c[k])});
   assert(c.current?.trim()&&c.source_version?.trim(),'Нет текста или версии источника.');assert(await digest(c.current)===c.paragraph_sha256?.toLowerCase(),'SHA-256 текущего абзаца не совпадает.');
-  assert(c.source_version.startsWith('SYNTHETIC'),'Тестовая версия принимает только искусственные кейсы. Реальный HH150 остаётся HOLD.');
+  assert(empirical||c.source_version.startsWith('SYNTHETIC'),'Разрешён только утверждённый пакет HH150 или искусственные кейсы.');
  }
 }
 function answerError(a,c){
@@ -33,6 +36,7 @@ function answerError(a,c){
 errorFor=answerError;
 async function validateState(s,complete=false){
  assert(object(s)&&s.schema==='ria-coder-session-1'&&s.instrument_version===INSTRUMENT,'Неподходящий формат сохранения.');
+ assert(!PROFILE_ID||s.coderId===PROFILE_ID,'Это сохранение другого кодировщика. Откройте его собственный профиль.');
  assert(Number.isInteger(s.revision)&&s.revision>=0&&typeof s.coderId==='string'&&typeof s.locked==='boolean','Повреждённые поля сохранения.');
  assert(object(s.training)&&object(s.training.answers)&&object(s.responses)&&object(s.work)&&object(s.demo)&&object(s.demo.responses),'Повреждена структура ответов/обучения.');
  for(const k of ['completed','keyAcknowledged','accepted'])assert(typeof s.training[k]==='boolean','Повреждён статус обучения.');
@@ -64,7 +68,7 @@ async function recoverJournal(){let raw=localStorage.getItem(STORE_KEY+':pending
 function download(name,data,type='application/octet-stream'){let a=document.createElement('a'),url=URL.createObjectURL(new Blob([data],{type}));a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)}
 async function makeBackup(s){let payload_json=JSON.stringify(s);return {schema:'ria-browser-backup-1',application_version:BROWSER_VERSION,instrument_version:INSTRUMENT,created_utc:utc(),payload_json,sha256:await digest(payload_json)}}
 async function backup(){try{try{await flush()}catch{}let b=await makeBackup(S);download('RIA_BROWSER_BACKUP_'+Date.now()+'.json',JSON.stringify(b,null,2),'application/json');lastBackupAt=Date.now();localStorage.setItem(STORE_KEY+':lastBackup',String(lastBackupAt));savedLabel()}catch(e){alertError(e)}}
-async function restoreBackup(b){assert(object(b)&&b.schema==='ria-browser-backup-1'&&b.instrument_version===INSTRUMENT&&[BROWSER_VERSION,'3.0-browser-test4','3.0-browser-test1','3.0-browser-test2','3.0-browser-test3'].includes(b.application_version)&&typeof b.payload_json==='string','Нужна резервная копия этой браузерной версии.');assert(await digest(b.payload_json)===b.sha256,'Резервная копия повреждена: SHA-256 не совпадает.');let n=JSON.parse(b.payload_json);await validateState(n);await flush();assert(!S.locked&&!S.packet&&!Object.keys(S.responses).length,'В профиле уже есть работа. Восстанавливайте в пустом профиле браузера, не поверх ответов.');n.revision=S.revision;let x=await commit(copy(n),S.revision);S=n;S.revision=x.revision;S.savedUtc=x.savedUtc;wanted=saved=0;localStorage.removeItem(STORE_KEY+':pending');render()}
+async function restoreBackup(b){assert(object(b)&&b.schema==='ria-browser-backup-1'&&b.instrument_version===INSTRUMENT&&[BROWSER_VERSION,'3.0-local-autosave1','3.0-browser-test4','3.0-browser-test1','3.0-browser-test2','3.0-browser-test3'].includes(b.application_version)&&typeof b.payload_json==='string','Нужна резервная копия этой браузерной версии.');assert(await digest(b.payload_json)===b.sha256,'Резервная копия повреждена: SHA-256 не совпадает.');let n=JSON.parse(b.payload_json);await validateState(n);await flush();assert(!S.locked&&!S.packet&&!Object.keys(S.responses).length,'В профиле уже есть работа. Восстанавливайте в пустом профиле браузера, не поверх ответов.');n.revision=S.revision;let x=await commit(copy(n),S.revision);S=n;S.revision=x.revision;S.savedUtc=x.savedUtc;wanted=saved=0;localStorage.removeItem(STORE_KEY+':pending');render()}
 function csvRow(a){return a.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')+'\r\n'}
 async function buildExport(s){
  let result={schema:'ria-coder-results-1',instrument_version:INSTRUMENT,instrument_sha256:M.instrument_sha256,application_version:BROWSER_VERSION,coder_id:s.coderId,status:s.locked?'FINAL_LOCKED':'DRAFT',exported_utc:utc(),packet:s.packet,responses:s.responses,revision:s.revision,locked_utc:s.lockedUtc||null};
@@ -86,7 +90,7 @@ async function browserInit(){
  const contextResponse=await fetch('training-context.json',{cache:'no-cache'});assert(contextResponse.ok,'Не удалось загрузить контекст учебных примеров.');const contextBytes=await contextResponse.arrayBuffer();assert(await digest(contextBytes)==='2f3afb111771a42d1502780fc57aab29327e29c0c3ee07ea85fa30dcff5a5f12','Изменён проверенный контекст учебных примеров.');TRAINING_CONTEXT=JSON.parse(new TextDecoder().decode(contextBytes)).examples;
  if(location.hash==='#codebook'){await startReferenceOnly();await registerOfflineCopy();return}
  await new Promise((resolve,reject)=>{navigator.locks.request(STORE_KEY,{ifAvailable:true},async lock=>{if(!lock){reject(Error('Эта работа уже открыта в другой вкладке. Закройте её и обновите страницу.'));return}resolve();await new Promise(r=>releaseLock=r)}).catch(reject)});
- db=await openDB();S=await readDB()||emptyState();await validateState(S);await recoverJournal();dataPath='Локальное хранилище браузера (IndexedDB), '+location.origin;lastBackupAt=Number(localStorage.getItem(STORE_KEY+':lastBackup')||0);booted=true;render();setInterval(savedLabel,60000);setInterval(()=>{if(booted&&!S.locked&&saved<wanted)void pump()},5000);
+ db=await openDB();S=await readDB()||emptyState();await validateState(S);await recoverJournal();dataPath='Локальное хранилище браузера (IndexedDB), '+location.origin;lastBackupAt=Number(localStorage.getItem(STORE_KEY+':lastBackup')||0);booted=true;render();if(PROFILE_ID){$('browserNotice').prepend(document.createTextNode('Coder '+PROFILE+' · '));let input=$('coderId');if(input)input.disabled=true;}setInterval(savedLabel,60000);setInterval(()=>{if(booted&&!S.locked&&saved<wanted)void pump()},5000);
  await registerOfflineCopy();
 }
 async function registerOfflineCopy(){
